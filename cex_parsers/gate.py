@@ -51,8 +51,9 @@ async def get_account_stats(json_summary: dict) -> dict:
                 unrealised_pnl = data['data'][0]['unrealised_pnl']
                 total_usd = data['data'][0]['total']
                 starting_balance = data['data'][0]['history']['dnw']
+                datetime_now = datetime.now(tz=kyiv_tz).strftime("%Y-%m-%d %H:%M:%S")
                 result = {
-                    'date': datetime.now().isoformat(),
+                    'datetime': datetime_now,
                     'pnl': pnl, 
                     'unrealised_pnl': unrealised_pnl, 
                     'total_usd': total_usd, 
