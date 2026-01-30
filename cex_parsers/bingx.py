@@ -19,6 +19,31 @@ BINGX_SECRETKEY = os.getenv('BINGX_SECRETKEY')
 APIURL = "https://open-api.bingx.com"
 
 async def get_token_price(token: str) -> float:
+    api_data = await get_data_from_api(token)
+    if api_data:
+        price = await normalize_price(api_data)
+        json_result = await get_old_results_data()
+
+        # Getting time in readable format
+        unix_timestamp = api_data['timestamp']
+        datetime_now = datetime.fromtimestamp(unix_timestamp / 1000, tz=kyiv_tz).strftime("%Y-%m-%d %H:%M:%S")
+
+        appended_data = {
+            'token': token,
+            'price': price,
+            'datetime': datetime_now
+        }
+
+        # Appending new data to token_results.json
+        await append_to_results(json_result, appended_data)
+
+        return price
+    else:
+        return "Error while parsing the price"
+
+        
+
+async def get_data_from_api(token: str):
     payload = {}
     path = '/openApi/cswap/v1/market/premiumIndex'
     method = "GET"
@@ -26,22 +51,18 @@ async def get_token_price(token: str) -> float:
         "symbol": f"{token}-USD"
     }
     paramsStr, urlParamsStr = await parseParam(paramsMap)
-
     data = await send_request(method, path, paramsStr, urlParamsStr, payload)
-    json_result = await get_json_results_data()
-    
-    unix_timestamp = data['timestamp']
-    datetime_now = datetime.fromtimestamp(unix_timestamp / 1000, tz=kyiv_tz).strftime("%Y-%m-%d %H:%M:%S")
+    return data
+
+async def normalize_price(data: dict):
     price = data['data'][0]['markPrice']
-    appended_data = {
-        'token': token,
-        'price': price,
-        'datetime': datetime_now
-    }
-    json_result['token_stats'].append(appended_data)
-    with open('output_bingx/token_results.json', 'w') as f:
-        json.dump(json_result, f, indent=4)
     return price
+
+async def append_to_results(old_data: dict, data_to_append: dict):
+    old_data['token_stats'].append(data_to_append)
+    with open('output_bingx/token_results.json', 'w') as f:
+        json.dump(old_data, f, indent=4)
+
 
 async def get_account_stats() -> dict:
     payload = {}
@@ -88,9 +109,12 @@ async def send_request(method, path, paramsStr, urlParamsStr, payload):
     headers = {
         'X-BX-APIKEY': BINGX_APIKEY,
     }
-    response = requests.request(method, url, headers=headers, data=payload)
-    data = response.json()
-    return data
+    try:
+        response = requests.request(method, url, headers=headers, data=payload)
+        data = response.json()
+        return data
+    except Exception as e:
+        print('Error:', e)
 
 async def parseParam(paramsMap):
     sortedKeys = sorted(paramsMap)
@@ -121,7 +145,7 @@ async def parseParam(paramsMap):
     return paramsStr, urlParamsStr
 
 
-async def get_json_results_data() -> dict:
+async def get_old_results_data() -> dict:
     if os.path.exists('output_bingx/token_results.json') and os.path.getsize('output_bingx/token_results.json') > 0:
         with open('output_bingx/token_results.json', 'r') as f:
             data = json.load(f)
